@@ -183,21 +183,12 @@ class AIOHTTPTransport(AsyncTransport):
 
             log.debug("Closing transport")
 
-            if (
-                self.client_session_args
-                and self.client_session_args.get("connector_owner") is False
-            ):
-
-                log.debug("connector_owner is False -> not closing connector")
-
-            else:
-                closed_event = self.create_aiohttp_closed_event(self.session)
-                await self.session.close()
-                try:
-                    await asyncio.wait_for(closed_event.wait(), self.ssl_close_timeout)
-                except asyncio.TimeoutError:
-                    pass
-
+            closed_event = self.create_aiohttp_closed_event(self.session)
+            await self.session.close()
+            try:
+                await asyncio.wait_for(closed_event.wait(), self.ssl_close_timeout)
+            except asyncio.TimeoutError:
+                pass
         self.session = None
 
     async def execute(
@@ -205,7 +196,7 @@ class AIOHTTPTransport(AsyncTransport):
         document: DocumentNode,
         variable_values: Optional[Dict[str, Any]] = None,
         operation_name: Optional[str] = None,
-        extra_args: Optional[Dict[str, Any]] = None,
+        extra_args: Dict[str, Any] = None,
         upload_files: bool = False,
     ) -> ExecutionResult:
         """Execute the provided document AST against the configured remote server
@@ -274,11 +265,8 @@ class AIOHTTPTransport(AsyncTransport):
             data.add_field("map", file_map_str, content_type="application/json")
 
             # Add the extracted files as remaining fields
-            for k, f in file_streams.items():
-                name = getattr(f, "name", k)
-                content_type = getattr(f, "content_type", None)
-
-                data.add_field(k, f, filename=name, content_type=content_type)
+            for k, v in file_streams.items():
+                data.add_field(k, v, filename=getattr(v, "name", k))
 
             post_args: Dict[str, Any] = {"data": data}
 
@@ -307,9 +295,6 @@ class AIOHTTPTransport(AsyncTransport):
 
         async with self.session.post(self.url, ssl=self.ssl, **post_args) as resp:
 
-            # Saving latest response headers in the transport
-            self.response_headers = resp.headers
-
             async def raise_response_error(resp: aiohttp.ClientResponse, reason: str):
                 # We raise a TransportServerError if the status code is 400 or higher
                 # We raise a TransportProtocolError in the other cases
@@ -337,11 +322,11 @@ class AIOHTTPTransport(AsyncTransport):
             except Exception:
                 await raise_response_error(resp, "Not a JSON answer")
 
-            if result is None:
-                await raise_response_error(resp, "Not a JSON answer")
-
             if "errors" not in result and "data" not in result:
                 await raise_response_error(resp, 'No "data" or "errors" keys in answer')
+
+            # Saving latest response headers in the transport
+            self.response_headers = resp.headers
 
             return ExecutionResult(
                 errors=result.get("errors"),

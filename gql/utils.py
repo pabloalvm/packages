@@ -1,6 +1,6 @@
 """Utilities to manipulate several python objects."""
 
-from typing import Any, Dict, List, Tuple, Type
+from typing import Any, Dict, Tuple, Type
 
 
 # From this response in Stackoverflow
@@ -47,12 +47,3 @@ def extract_files(
     nulled_variables = recurse_extract("variables", variables)
 
     return nulled_variables, files
-
-
-def str_first_element(errors: List) -> str:
-    try:
-        first_error = errors[0]
-    except (KeyError, TypeError):
-        first_error = errors
-
-    return str(first_error)

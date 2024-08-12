@@ -295,11 +295,7 @@ class DSLSchema:
         if type_def is None:
             raise AttributeError(f"Type '{name}' not found in the schema!")
 
-        if not isinstance(type_def, (GraphQLObjectType, GraphQLInterfaceType)):
-            raise AttributeError(
-                f'Type "{name} ({type_def!r})" is not valid as an attribute of'
-                " DSLSchema. Only Object types or Interface types are accepted."
-            )
+        assert isinstance(type_def, (GraphQLObjectType, GraphQLInterfaceType))
 
         return DSLType(type_def, self)
 
@@ -503,7 +499,6 @@ class DSLOperation(DSLExecutable, DSLRootFieldSelector):
             selection_set=self.selection_set,
             variable_definitions=self.variable_definitions.get_ast_definitions(),
             **({"name": NameNode(value=self.name)} if self.name else {}),
-            directives=(),
         )
 
     def __repr__(self) -> str:
@@ -598,7 +593,6 @@ class DSLVariableDefinitions:
                 default_value=None
                 if var.default_value is None
                 else ast_from_value(var.default_value, var.type),
-                directives=(),
             )
             for var in self.variables.values()
             if var.type is not None  # only variables used
@@ -820,11 +814,7 @@ class DSLField(DSLSelectableWithAlias, DSLFieldSelector):
         """
         self.parent_type = parent_type
         self.field = field
-        self.ast_field = FieldNode(
-            name=NameNode(value=name),
-            arguments=(),
-            directives=(),
-        )
+        self.ast_field = FieldNode(name=NameNode(value=name), arguments=())
         self.dsl_type = dsl_type
 
         log.debug(f"Creating {self!r}")
@@ -934,6 +924,12 @@ class DSLMetaField(DSLField):
 
         super().__init__(name, self.meta_type, field)
 
+    def alias(self, alias: str) -> "DSLSelectableWithAlias":
+        """
+        :meta private:
+        """
+        return self
+
 
 class DSLInlineFragment(DSLSelectable, DSLFragmentSelector):
     """DSLInlineFragment represents an inline fragment for the DSL code."""
@@ -956,7 +952,7 @@ class DSLInlineFragment(DSLSelectable, DSLFragmentSelector):
 
         log.debug(f"Creating {self!r}")
 
-        self.ast_field = InlineFragmentNode(directives=())
+        self.ast_field = InlineFragmentNode()
 
         DSLSelector.__init__(self, *fields, **fields_with_alias)
 
@@ -1024,7 +1020,7 @@ class DSLFragment(DSLSelectable, DSLFragmentSelector, DSLExecutable):
         `issue #4125 of mypy <https://github.com/python/mypy/issues/4125>`_.
         """
 
-        spread_node = FragmentSpreadNode(directives=())
+        spread_node = FragmentSpreadNode()
         spread_node.name = NameNode(value=self.name)
 
         return spread_node
@@ -1068,28 +1064,11 @@ class DSLFragment(DSLSelectable, DSLFragmentSelector, DSLExecutable):
                 "Missing type condition. Please use .on(type_condition) method"
             )
 
-        fragment_variable_definitions = self.variable_definitions.get_ast_definitions()
-
-        if len(fragment_variable_definitions) == 0:
-            """Fragment variable definitions are obsolete and only supported on
-            graphql-core if the Parser is initialized with:
-            allow_legacy_fragment_variables=True.
-
-            We will not provide variable_definitions instead of providing an empty
-            tuple to be coherent with how it works by default on graphql-core.
-            """
-            variable_definition_kwargs = {}
-        else:
-            variable_definition_kwargs = {
-                "variable_definitions": fragment_variable_definitions
-            }
-
         return FragmentDefinitionNode(
             type_condition=NamedTypeNode(name=NameNode(value=self._type.name)),
             selection_set=self.selection_set,
-            **variable_definition_kwargs,
+            variable_definitions=self.variable_definitions.get_ast_definitions(),
             name=NameNode(value=self.name),
-            directives=(),
         )
 
     def __repr__(self) -> str:

@@ -27,7 +27,7 @@ class TransportServerError(TransportError):
         self.code = code
 
 
-class TransportQueryError(TransportError):
+class TransportQueryError(Exception):
     """The server returned an error for a specific query.
 
     This exception should not close the transport connection.
